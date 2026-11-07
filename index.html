@@ -249,6 +249,13 @@ const fmtLong = s => { const h = Math.floor(s / 3600), m = Math.round(s % 3600 /
 const hue = s => { let h = 0; for (const c of String(s || "aura")) h = (h * 31 + c.charCodeAt(0)) % 360; return 215 + (h % 85); };
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+let toastTimer = null;
+function toast(msg, ms = 2800) {
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer);
+  if (ms) toastTimer = setTimeout(() => { el.hidden = true; }, ms);
+}
 
 const IC = {
   play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
@@ -404,13 +411,15 @@ const isHiRes = t => t && t.format === "FLAC" && ((t.bits || 0) > 16 || (t.sampl
 
 /* ---------- Seed : la playlist « Mode Slime » ---------- */
 const SLIME = [
-  ["An Ending (Ascent)","Brian Eno"],["Falling","Julee Cruise"],["Fade Into You","Mazzy Star"],
-  ["Heaven or Las Vegas","Cocteau Twins"],["Space Song","Beach House"],["Shadow","Chromatics"],
-  ["Cherry-coloured Funk","Cocteau Twins"],["Fineshrine","Purity Ring"],["Genesis","Grimes"],
-  ["Dark Beach","Pastel Ghost"],["Obedear","Purity Ring"],["Roygbiv","Boards of Canada"],
-  ["Myth","Beach House"],["Heavy Water/I'd Rather Be Sleeping","Grouper"],["Rhubarb","Aphex Twin"]
+  ["Heaven or Las Vegas","Cocteau Twins"],["Cherry-coloured Funk","Cocteau Twins"],["Shadow","Chromatics"],
+  ["Fineshrine","Purity Ring"],["Dark Beach","Pastel Ghost"],["Heavy Water/I'd Rather Be Sleeping","Grouper"],
+  ["Iceblink Luck","Cocteau Twins"],["The Trip","Still Corners"],["Fifty-fifty Clown","Cocteau Twins"],
+  ["Fotzepolitic","Cocteau Twins"],["Fireflies","Still Corners"],["Kill For Love","Chromatics"],
+  ["Under Your Spell","Desire"],["Carolyn's Fingers","Cocteau Twins"]
 ];
-const wishMatches = (w, t) => norm(t.title) === norm(w.title) && (!t.artist || !w.artist || norm(t.artist).includes(norm(w.artist)) || norm(w.artist).includes(norm(t.artist)));
+const SLIME_V = 2;
+const normTitle = s => norm(String(s || "").replace(/\s*[\(\[][^)\]]*(remaster|version|edit|mix|live|mono|stereo)[^)\]]*[\)\]]/gi, "").replace(/\s+-\s+[^-]*(remaster|version|edit|mix|live)[^-]*$/i, ""));
+const wishMatches = (w, t) => normTitle(t.title) === normTitle(w.title) && (!t.artist || !w.artist || norm(t.artist).includes(norm(w.artist)) || norm(w.artist).includes(norm(t.artist)));
 async function resolveWishes(newTracks) {
   for (const pl of playlists) {
     let changed = false;
@@ -892,9 +901,13 @@ document.addEventListener("keydown", e => {
   tracks = sortTracks(await S.all("tracks"));
   for (const t of tracks) byId.set(t.id, t);
   playlists = (await S.all("playlists")).sort((a, b) => (a.created || 0) - (b.created || 0));
+  const slimeItems = () => SLIME.map(([title, artist]) => { const w = { title, artist }; const hit = tracks.find(t => wishMatches(w, t)); return hit ? hit.id : w; });
   if (!playlists.length && !tracks.length && lsGet("aura.seeded") !== "1") {
-    const pl = { id: uid(), name: "Mode Slime", items: SLIME.map(([title, artist]) => ({ title, artist })), created: Date.now() };
+    const pl = { id: uid(), name: "Mode Slime", items: slimeItems(), seed: SLIME_V, created: Date.now() };
     playlists.push(pl); await S.put("playlists", pl); lsSet("aura.seeded", "1");
+  } else {
+    const old = playlists.find(p => p.name === "Mode Slime" && (p.seed || 1) < SLIME_V);
+    if (old) { old.items = slimeItems(); old.seed = SLIME_V; await S.put("playlists", old); }
   }
   syncUI();
   render();
